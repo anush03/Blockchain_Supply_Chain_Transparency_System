@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 
-// Contract details
-
-const CONTRACT_ADDRESS = "0x3547B39ae2cc0bC194234D04C9D936eb49C05aaD";
-const CONTRACT_ABI = [
+const infuraUrl =
+  "https://sepolia.infura.io/v3/207b70c1a1464149ba8c3c2b8c97b365";
+const provider = new ethers.JsonRpcProvider(infuraUrl);
+const contractABI = [
   {
     inputs: [
       { internalType: "string", name: "_name", type: "string" },
@@ -51,123 +51,97 @@ const CONTRACT_ABI = [
     type: "function",
   },
 ];
+const contractAddress = "0x3547B39ae2cc0bC194234D04C9D936eb49C05aaD";
 
-// export async function connectToBlockchain() {
-//   console.log("Checking for MetaMask...");
+const contract = new ethers.Contract(contractAddress, contractABI, provider);
 
-//   if (typeof window.ethereum === "undefined") {
-//     console.error("MetaMask not found.");
-//     alert(
-//       "MetaMask is not installed. Please install it from https://metamask.io."
-//     );
-//     throw new Error("MetaMask not found");
-//   }
+// Connect to the wallet
+export const connectWallet = async () => {
+  if (window.ethereum) {
+    try {
+      // Request account access from the user
+      await window.ethereum.request({ method: "eth_requestAccounts" });
 
-//   try {
-//     console.log("MetaMask detected. Requesting accounts...");
+      // Use BrowserProvider to interact with the Ethereum network
+      const provider = new ethers.BrowserProvider(window.ethereum);
 
-//     // Request account access
-//     const accounts = await window.ethereum.request({
-//       method: "eth_requestAccounts",
-//     });
-//     if (!accounts || accounts.length === 0) {
-//       throw new Error("No accounts found. Please connect MetaMask.");
-//     }
-//     console.log("Connected account:", accounts[0]);
+      // Get the signer (the account from the wallet)
+      const signer = await provider.getSigner();
 
-//     // Initialize ethers provider and signer
-//     const provider = new ethers.providers.Web3Provider(window.ethereum, "any"); // Use "any" to support multiple networks
-//     const signer = provider.getSigner();
+      console.log("Wallet connected:", await signer.getAddress());
 
-//     console.log("Provider and signer initialized:", provider, signer);
-//     return { provider, signer };
-//   } catch (error) {
-//     console.error("Error connecting to MetaMask:", error);
-//     throw new Error("Unable to connect to MetaMask");
-//   }
-// }
-
-const INFURA_URL =
-  "https://sepolia.infura.io/v3/207b70c1a1464149ba8c3c2b8c97b365";
-
-// Create the provider using Infura for Sepolia
-const provider = new ethers.providers.JsonRpcProvider(INFURA_URL);
-
-export async function connectToBlockchain() {
-  console.log("Connecting to Sepolia network via Infura...");
-
-  if (typeof window.ethereum === "undefined") {
-    console.error("MetaMask not found.");
-    alert(
-      "MetaMask is not installed. Please install it from https://metamask.io."
-    );
-    throw new Error("MetaMask not found");
-  }
-
-  try {
-    console.log("MetaMask detected. Requesting accounts...");
-
-    // Request account access from MetaMask
-    const accounts = await window.ethereum.request({
-      method: "eth_requestAccounts",
-    });
-    if (!accounts || accounts.length === 0) {
-      throw new Error("No accounts found. Please connect MetaMask.");
+      // Return the signer to be used for transactions
+      return signer;
+    } catch (err) {
+      console.error("Connection failed:", err);
+      return null;
     }
-    console.log("Connected account:", accounts[0]);
-
-    // Create a signer using MetaMask
-    const signer = new ethers.BrowserProvider(window.ethereum).getSigner();
-
-    console.log("Provider and signer initialized:", provider, signer);
-    return { provider, signer };
-  } catch (error) {
-    console.error("Error connecting to MetaMask or Infura:", error);
-    throw new Error("Unable to connect to MetaMask or Infura");
+  } else {
+    console.error("Please install MetaMask!");
+    return null;
   }
-}
+};
 
-// To check the latest block number using the Infura provider
-provider
-  .getBlockNumber()
-  .then((blockNumber) => {
-    console.log("Latest block number:", blockNumber);
-  })
-  .catch((error) => {
-    console.error("Error getting block number:", error);
-  });
+// Add product
+export const addProduct = async (name, origin) => {
+  const signer = await connectWallet();
+  const contract = new ethers.Contract(contractAddress, contractABI, signer);
 
-export async function addProduct(name, origin) {
   try {
-    const { signer } = await connectToBlockchain();
-    const contract = new ethers.Contract(
-      CONTRACT_ADDRESS,
-      CONTRACT_ABI,
-      signer
-    );
-
-    // Call the smart contract method
     const tx = await contract.addProduct(name, origin);
-    await tx.wait(); // Wait for transaction to be mined
-    console.log("Product added successfully:", tx);
-  } catch (error) {
-    console.error("Error adding product:", error);
-    throw new Error(
-      "Failed to add product. Check MetaMask and blockchain connection."
-    );
-  }
-}
+    console.log("Transaction sent. Waiting for confirmation...");
+    const receipt = await tx.wait();
 
-export async function updateJourney(id, stage) {
-  const { contract } = await connectToBlockchain();
-  const tx = await contract.updateJourney(id, stage);
+    // Log the entire receipt for debugging purposes
+    console.log("Transaction Receipt:", receipt);
+
+    // Look for the 'ProductAdded' event in the receipt
+    const productAddedEvent = receipt.events?.find(
+      (event) => event.event === "ProductAdded"
+    );
+
+    if (productAddedEvent) {
+      const productId = productAddedEvent.args.id.toString();
+      console.log(`Product added with ID: ${productId}`);
+      return productId; // Return the product ID
+    } else {
+      console.error("ProductAdded event not found in receipt.");
+      return null; // Return null if event is not found
+    }
+  } catch (err) {
+    console.error("Error adding product:", err);
+    return null; // Return null if error occurs
+  }
+};
+
+// Update journey
+export const updateJourney = async (_id, _stage) => {
+  const signer = provider.getSigner();
+  const contractWithSigner = contract.connect(signer);
+  const tx = await contractWithSigner.updateJourney(_id, _stage);
   await tx.wait();
   console.log("Journey updated:", tx);
-}
+};
 
-export async function getJourney(id) {
-  const { contract } = await connectToBlockchain();
-  const journey = await contract.getJourney(id);
-  console.log("Journey for product ID", id, journey);
-  return journey;
-}
+// Get journey
+export const getJourney = async (_id) => {
+  try {
+    // Get the provider
+    const provider = new ethers.BrowserProvider(window.ethereum);
+
+    // Connect to the contract
+    const contract = new ethers.Contract(
+      contractAddress,
+      contractABI,
+      provider
+    );
+
+    // Call the getJourney function from the smart contract
+    const journey = await contract.getJourney(_id);
+
+    return journey; // This will return the journey array
+  } catch (err) {
+    console.error("Error fetching journey:", err);
+    return [];
+  }
+};

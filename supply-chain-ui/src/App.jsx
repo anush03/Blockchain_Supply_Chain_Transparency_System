@@ -1,105 +1,117 @@
 import React, { useState } from "react";
 import {
-  connectToBlockchain,
   addProduct,
+  updateJourney,
   getJourney,
+  connectWallet,
 } from "./components/blockchain";
 
 const App = () => {
-  const [account, setAccount] = useState(null); // Store the connected account
   const [productName, setProductName] = useState("");
   const [productOrigin, setProductOrigin] = useState("");
-  const [productId, setProductId] = useState("");
+  const [journeyStage, setJourneyStage] = useState("");
+  const [productId, setProductId] = useState(""); // This will store the product ID
   const [journey, setJourney] = useState([]);
+  const [AccountAddress, setAccountAddress] = useState(null);
 
-  // Function to connect MetaMask
-  const handleConnect = async () => {
-    try {
-      if (typeof window.ethereum !== "undefined") {
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-        setAccount(accounts[0]); // Set the first account as the active account
-        alert(`Connected to MetaMask: ${accounts[0]}`);
-      } else {
-        alert("MetaMask is not installed. Please install it to use this app.");
+  const handleAddProduct = async () => {
+    if (productName && productOrigin) {
+      try {
+        // Call the addProduct function to add the product
+        const newProductId = await addProduct(productName, productOrigin);
+
+        // Set the productId state with the newly added product's ID
+        setProductId(newProductId);
+
+        // Clear the form inputs
+        setProductName("");
+        setProductOrigin("");
+
+        console.log(`Product added with ID: ${newProductId}`);
+      } catch (err) {
+        console.error("Error adding product:", err);
       }
-    } catch (error) {
-      console.error("Error connecting to MetaMask:", error);
-      alert("Failed to connect to MetaMask.");
     }
   };
 
-  const handleAddProduct = async () => {
-    try {
-      const { signer } = await connectToBlockchain();
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        signer
-      );
-      const tx = await contract.addProduct(productName, productOrigin);
-      await tx.wait();
-      alert("Product added successfully!");
-    } catch (error) {
-      console.error("Error adding product:", error);
-      alert(
-        "Failed to add product. Ensure MetaMask is connected and try again."
-      );
+  const handleUpdateJourney = async () => {
+    if (productId && journeyStage) {
+      try {
+        // Call the updateJourney function to update the product's journey
+        await updateJourney(productId, journeyStage);
+        setJourneyStage("");
+      } catch (err) {
+        console.error("Failed to update journey:", err);
+      }
     }
   };
 
   const handleGetJourney = async () => {
-    if (!account) {
-      alert("Please connect MetaMask first.");
-      return;
-    }
-    try {
-      const journeyData = await getJourney(productId);
-      setJourney(journeyData);
-    } catch (error) {
-      console.error("Error retrieving journey:", error);
+    if (productId) {
+      try {
+        // Fetch the journey data
+        const journeyData = await getJourney(productId);
+
+        // Update state with journey data
+        setJourney(journeyData);
+      } catch (err) {
+        console.error("Failed to get journey:", err);
+      }
+    } else {
+      console.log("Product ID is required.");
     }
   };
 
+  const handleConnectWallet = async () => {
+    const signer = await connectWallet();
+    const AccountAdd = await signer.getAddress();
+    setAccountAddress(AccountAdd);
+  };
+
   return (
-    <div>
-      <h1>Supply Chain Transparency System</h1>
+    <div className="app">
+      <h1>Supply Chain</h1>
+      <button onClick={handleConnectWallet}>
+        {AccountAddress ? `Connected: ${AccountAddress}` : "Connect Wallet"}
+      </button>
 
-      {/* Connect Wallet */}
-      <div>
-        <button onClick={handleConnect}>
-          {account ? `Connected: ${account}` : "Connect Wallet"}
-        </button>
-      </div>
-
-      {/* Add Product */}
       <div>
         <h2>Add Product</h2>
         <input
           type="text"
           placeholder="Product Name"
-          value={productName}
+          value={productName || ""} // Make sure it's always a string, even if empty
           onChange={(e) => setProductName(e.target.value)}
         />
         <input
           type="text"
-          placeholder="Origin"
-          value={productOrigin}
+          placeholder="Product Origin"
+          value={productOrigin || ""} // Same for the product origin
           onChange={(e) => setProductOrigin(e.target.value)}
         />
+
         <button onClick={handleAddProduct}>Add Product</button>
       </div>
 
-      {/* Get Journey */}
       <div>
-        <h2>Get Product Journey</h2>
+        <h2>Update Journey</h2>
         <input
           type="number"
           placeholder="Product ID"
           value={productId}
           onChange={(e) => setProductId(e.target.value)}
         />
+        <input
+          type="text"
+          placeholder="Journey Stage"
+          value={journeyStage}
+          onChange={(e) => setJourneyStage(e.target.value)}
+        />
+        <button onClick={handleUpdateJourney}>Update Journey</button>
+      </div>
+
+      <div>
+        <h2>Get Journey</h2>
         <button onClick={handleGetJourney}>Get Journey</button>
         <ul>
           {journey.map((stage, index) => (
